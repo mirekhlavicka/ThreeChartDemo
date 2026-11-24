@@ -28,8 +28,8 @@ jobs:
           dotnet-version: 10.0.x
 
       # Only needed if you enabled RunAOTCompilation in the .csproj
-      # - name: Install WASM tools workload
-      #   run: dotnet workload install wasm-tools
+      - name: Install WASM tools workload
+        run: dotnet workload install wasm-tools
 
       - name: Publish
         run: dotnet publish ThreeChartDemo/ThreeChartDemo.csproj -c Release -o release
