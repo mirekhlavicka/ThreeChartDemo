@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D function chart - Blazor WASM + ThreeJS</title>
+    <!-- For hosting in a sub-folder (e.g. GitHub Pages project site) change to <base href="/RepoName/" /> -->
+    <base href="/" />
+    <link rel="stylesheet" href="css/app.css" />
+
+    <!-- Filled in by .NET at build time (asset fingerprinting). Keep it. -->
+    <script type="importmap"></script>
+
+    <!-- ThreeJS from CDN, fixed version. Addons (OrbitControls) import "three" via this map. -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="app" class="loading">Loading .NET runtime…</div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>
