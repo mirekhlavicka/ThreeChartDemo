@@ -1,25 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>ThreeChartDemo</RootNamespace>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>ThreeChartDemo</RootNamespace>
+	</PropertyGroup>
 
-  <!-- Optional: much faster numeric code, but needs "dotnet workload install wasm-tools"
+	<!-- Optional: much faster numeric code, but needs "dotnet workload install wasm-tools"
        and makes Release publish slower and the download bigger. Uncomment when you need it.
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <RunAOTCompilation>true</RunAOTCompilation>
-    <WasmEnableSIMD>true</WasmEnableSIMD>
-  </PropertyGroup>
   -->
+	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
+		<RunAOTCompilation>true</RunAOTCompilation>
+		<WasmEnableSIMD>true</WasmEnableSIMD>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.*" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.*" PrivateAssets="all" />
-    <!-- Expression parser (pure managed, no Reflection.Emit -> works in WebAssembly). Pin an exact version for production. -->
-    <PackageReference Include="NCalc" Version="5.*" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.*" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.*" PrivateAssets="all" />
+		<!-- Expression parser (pure managed, no Reflection.Emit -> works in WebAssembly). Pin an exact version for production. -->
+		<PackageReference Include="NCalc" Version="5.*" />
+	</ItemGroup>
 
 </Project>
