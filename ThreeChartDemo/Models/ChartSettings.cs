@@ -12,8 +12,8 @@ public sealed class ChartSettings
     public double TMin { get; set; } = 0;
     public double TMax { get; set; } = 6.28;
 
-    public int DivisionsX { get; set; } = 80;
-    public int DivisionsY { get; set; } = 80;
+    public int DivisionsX { get; set; } = 20;
+    public int DivisionsY { get; set; } = 20;
     public int DivisionsT { get; set; } = 60;
 
     /// <summary>Animation speed: how many time steps are shown per second.</summary>
