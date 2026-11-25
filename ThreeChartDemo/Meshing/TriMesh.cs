@@ -22,6 +22,9 @@ public sealed class TriMesh
     private bool[] _flag;   // "is in the refine list"
     private int _triangleCount;
 
+    // ids of triangles created / changed by splitting since the last TakeTouched() call
+    private readonly List<int> _touched = new();
+
     private TriMesh(int vertexCapacity, int triangleCapacity)
     {
         _x = new double[vertexCapacity];
@@ -255,7 +258,104 @@ public sealed class TriMesh
         _version[t]++;
         _flag[t] = false;     // removed from the refine list: it has been divided
         _flag[t2] = false;
+        _touched.Add(t);
+        _touched.Add(t2);
         return t2;
+    }
+
+    /// <summary>
+    /// Returns (and forgets) the ids of all triangles that were created or changed by refinement since
+    /// the last call. Only these can need another test in the next refinement pass, because every other
+    /// triangle still has exactly the same vertices and therefore the same error as before.
+    /// </summary>
+    public int[] TakeTouched()
+    {
+        var result = new HashSet<int>(_touched).ToArray();   // a triangle may be split several times
+        _touched.Clear();
+        return result;
+    }
+
+    // ------------------------------------------------------------------ smoothing
+
+    /// <summary>
+    /// One Jacobi step of Laplacian smoothing: every interior vertex moves to the average of the
+    /// vertices connected to it. Boundary vertices stay where they are, so the domain keeps its shape.
+    /// A move that would flip or squash a triangle is cancelled. Values of f are NOT updated here;
+    /// the returned ids of the moved vertices tell the caller where f must be evaluated again.
+    /// </summary>
+    public int[] LaplacianSmooth()
+    {
+        int nv = _vertexCount;
+        var boundary = new bool[nv];
+        var sumX = new double[nv];
+        var sumY = new double[nv];
+        var count = new int[nv];
+
+        for (int t = 0; t < _triangleCount; t++)
+        {
+            for (int e = 0; e < 3; e++)
+            {
+                if (_n[t * 3 + e] < 0)
+                {
+                    boundary[_v[t * 3 + (e + 1) % 3]] = true;
+                    boundary[_v[t * 3 + (e + 2) % 3]] = true;
+                }
+            }
+
+            // Each interior vertex is visited once per incident triangle and every neighbour of it
+            // appears in exactly two of these triangles, so all neighbours get the same weight.
+            for (int c = 0; c < 3; c++)
+            {
+                int v = _v[t * 3 + c];
+                int a = _v[t * 3 + (c + 1) % 3];
+                int b = _v[t * 3 + (c + 2) % 3];
+                sumX[v] += _x[a] + _x[b];
+                sumY[v] += _y[a] + _y[b];
+                count[v] += 2;
+            }
+        }
+
+        var newX = new double[nv];
+        var newY = new double[nv];
+        for (int v = 0; v < nv; v++)
+        {
+            if (boundary[v] || count[v] == 0) { newX[v] = _x[v]; newY[v] = _y[v]; }
+            else { newX[v] = sumX[v] / count[v]; newY[v] = sumY[v] / count[v]; }
+        }
+
+        // Safety: cancel moves of vertices of triangles that would be flipped or nearly collapsed.
+        // Cancelling one vertex changes its neighbours' triangles, so repeat until everything is valid.
+        bool changed;
+        do
+        {
+            changed = false;
+            for (int t = 0; t < _triangleCount; t++)
+            {
+                int a = _v[t * 3], b = _v[t * 3 + 1], c = _v[t * 3 + 2];
+                double oldArea = (_x[b] - _x[a]) * (_y[c] - _y[a]) - (_x[c] - _x[a]) * (_y[b] - _y[a]);
+                double newArea = (newX[b] - newX[a]) * (newY[c] - newY[a]) - (newX[c] - newX[a]) * (newY[b] - newY[a]);
+
+                if (newArea > 0.2 * oldArea) continue;
+
+                foreach (int v in new[] { a, b, c })
+                {
+                    if (newX[v] != _x[v] || newY[v] != _y[v])
+                    {
+                        newX[v] = _x[v]; newY[v] = _y[v];
+                        changed = true;
+                    }
+                }
+            }
+        } while (changed);
+
+        var moved = new List<int>();
+        for (int v = 0; v < nv; v++)
+        {
+            if (newX[v] == _x[v] && newY[v] == _y[v]) continue;
+            _x[v] = newX[v]; _y[v] = newY[v];
+            moved.Add(v);
+        }
+        return moved.ToArray();
     }
 
     // ------------------------------------------------------------------ export

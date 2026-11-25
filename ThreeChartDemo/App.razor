@@ -6,18 +6,22 @@
 
 <div class="layout">
     <aside class="panel @(_panelOpen ? "" : "collapsed")">
-        <h1>3D function chart</h1>
-        <p class="hint">Blazor WebAssembly + NCalc + ThreeJS</p>
+        <h1>Adaptive 3D function chart</h1>
+        <p class="hint">Blazor WebAssembly AOT + NCalc + ThreeJS</p>
 
         <label for="formula">f(x, y, t) =</label>
-        <input id="formula" type="text" spellcheck="false" @bind="_settings.Formula" @bind:event="oninput" />
+        <textarea id="formula" class="formula" rows="5" spellcheck="false" autocomplete="off"
+                  @bind="_settings.Formula" @bind:event="oninput"></textarea>
 
-        <div class="examples">
-            @foreach (var ex in Examples)
-            {
-                <button type="button" class="chip" @onclick="() => _settings.Formula = ex">@ex</button>
-            }
-        </div>
+        <label>Examples
+            <select @bind="_selectedExample" @bind:after="ApplyExample">
+                <option value="">Choose an example…</option>
+                @foreach (var ex in Examples)
+                {
+                    <option value="@ex.Formula">@ex.Name</option>
+                }
+            </select>
+        </label>
 
         <div class="grid3">
             <label>X min <input type="number" step="any" @bind="_settings.XMin" /></label>
@@ -43,6 +47,9 @@
                 <label>Max refinements <input type="number" min="0" max="30" @bind="_settings.MaxRefinements" /></label>
                 <label>Max triangles <input type="number" min="100" step="1000" @bind="_settings.MaxTriangles" /></label>
             </div>
+            <label class="check">
+                <input type="checkbox" @bind="_settings.LaplacianSmoothing" /> Laplacian smoothing
+            </label>
             <p class="hint">X / Y divisions define the initial coarse grid. A triangle is refined when f at its centre differs
                 from the linear interpolation of its vertices by more than epsilon (absolute units of f).</p>
         }
@@ -99,15 +106,19 @@
 </div>
 
 @code {
-    private static readonly string[] Examples =
+    private static readonly (string Name, string Formula)[] Examples =
     {
-        "sin(x + t) + cos(y - t)",
-        "sin(x + t) + cos(x + t)",
-        "sin(sqrt(x*x + y*y) - 3*t)",
-        "exp(-(x*x + y*y) / 8) * cos(2*x - 3*t)",
-        "exp(-((x - 3*cos(t))*(x - 3*cos(t)) + (y - 3*sin(t))*(y - 3*sin(t)))) * 3",
-        "sin(x*y + t)",
+        ("Traveling waves", "sin(x + t) + cos(y - t)"),
+        ("Plane wave", "sin(x + t) + cos(x + t)"),
+        ("Ripples from the centre", "sin(sqrt(x*x + y*y) - 3*t)"),
+        ("Gaussian wave packet", "exp(-(x*x + y*y) / 8) * cos(2*x - 3*t)"),
+        ("Moving peak (sharp, good for adaptive)", "3 * exp(-((x - 3*cos(t))*(x - 3*cos(t)) + (y - 3*sin(t))*(y - 3*sin(t))))"),
+        ("Moving two peaks", "3 * exp(-((x - 3*cos(t))*(x - 3*cos(t)) + (y - 3*sin(t))*(y - 3*sin(t)))) + 3 * exp(-((x - 3*cos(-t))*(x - 3*cos(-t)) + (y - 3*sin(-t))*(y - 3*sin(-t))))"),
+        ("Interference", "sin(x*y + t)"),
+        ("Advanced", "x*sin(2*x + t) + y*cos(2*y - t)")
     };
+
+    private string _selectedExample = "";
 
     private readonly ChartSettings _settings = new();
     private ElementReference _host;
@@ -349,6 +360,13 @@
     // float[] / uint[] -> byte[]: .NET sends byte[] to JS as a Uint8Array (binary, no JSON).
     private static byte[] ToBytes(ReadOnlySpan<float> data) => MemoryMarshal.AsBytes(data).ToArray();
     private static byte[] ToBytes(ReadOnlySpan<uint> data) => MemoryMarshal.AsBytes(data).ToArray();
+
+    private void ApplyExample()
+    {
+        if (!string.IsNullOrEmpty(_selectedExample))
+            _settings.Formula = _selectedExample;
+        _selectedExample = "";      // show the placeholder again, so the same example can be picked twice
+    }
 
     private async Task OnWireframeChanged(ChangeEventArgs e)
     {

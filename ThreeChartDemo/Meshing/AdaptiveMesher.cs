@@ -26,20 +26,26 @@ public static class AdaptiveMesher
         progress?.Invoke(0.1);
 
         // 3) refinement passes
+        //    Pass 0 tests every triangle. Later passes test only the triangles created by the previous
+        //    pass: all other triangles have the same vertices as before, so the same error as before.
+        int[] candidates = Enumerable.Range(0, mesh.TriangleCount).ToArray();
         var refineList = new List<int>();
+
         for (int pass = 0; pass < s.MaxRefinements; pass++)
         {
             // 3a) find triangles where f(centre) differs from the linear approximation
             refineList.Clear();
-            int count = mesh.TriangleCount;
-            for (int t = 0; t < count; t++)
+            for (int i = 0; i < candidates.Length; i++)
             {
+                int t = candidates[i];
+                if (mesh.IsFlagged(t)) continue;                 // already in the list
+
                 if (NeedsRefinement(mesh, t, f, s.Epsilon))
                 {
                     mesh.SetFlag(t, true);
                     refineList.Add(t);
                 }
-                if ((t & 255) == 0) await slicer.YieldIfNeededAsync(ct);
+                if ((i & 255) == 0) await slicer.YieldIfNeededAsync(ct);
             }
             if (refineList.Count == 0) break;
 
@@ -59,8 +65,30 @@ public static class AdaptiveMesher
                 if ((k & 63) == 0) await slicer.YieldIfNeededAsync(ct);
             }
 
-            progress?.Invoke(0.1 + 0.9 * (pass + 1.0) / s.MaxRefinements);
+            candidates = mesh.TakeTouched();     // the triangles to test in the next pass
+
+            progress?.Invoke(0.1 + 0.8 * (pass + 1.0) / s.MaxRefinements);
             if (capped) break;
+        }
+
+        // 4) optional Laplacian smoothing: 3 passes, then evaluate f at the final positions
+        if (s.LaplacianSmoothing)
+        {
+            const int SmoothingPasses = 3;
+
+            var movedSet = new HashSet<int>();
+            for (int pass = 0; pass < SmoothingPasses; pass++)
+            {
+                foreach (int v in mesh.LaplacianSmooth())
+                    movedSet.Add(v);                      // a vertex may move in several passes
+            }
+
+            int i = 0;
+            foreach (int v in movedSet)
+            {
+                mesh.SetF(v, f(mesh.X(v), mesh.Y(v)));
+                if ((++i & 255) == 0) await slicer.YieldIfNeededAsync(ct);
+            }
         }
 
         progress?.Invoke(1.0);

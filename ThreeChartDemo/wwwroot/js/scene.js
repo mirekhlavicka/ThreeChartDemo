@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const BOX = 10, HEIGHT = 5;
+const FLOOR_GAP = 0.1;      // distance between the lowest possible surface point (y = 0) and the floor grid
 
 let host, renderer, scene, camera, controls, resizeObserver;
 let surface = null;
@@ -35,13 +36,16 @@ export function init(hostElement) {
     fill.position.set(-10, 6, -8);
     scene.add(fill);
 
-    // Floor grid + bounding box.
-    scene.add(new THREE.GridHelper(BOX, 10, 0x6b7a8a, 0x2f3b48));
+    // Floor grid + bounding box, both lowered by FLOOR_GAP so the surface never touches the floor.
+    const grid = new THREE.GridHelper(BOX, 10, 0x6b7a8a, 0x2f3b48);
+    grid.position.y = -FLOOR_GAP;
+    scene.add(grid);
 
+    const boxHeight = HEIGHT + FLOOR_GAP;
     const box = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.BoxGeometry(BOX, HEIGHT, BOX)),
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(BOX, boxHeight, BOX)),
         new THREE.LineBasicMaterial({ color: 0x55657a }));
-    box.position.y = HEIGHT / 2;
+    box.position.y = boxHeight / 2 - FLOOR_GAP;      // spans y = -FLOOR_GAP ... HEIGHT
     scene.add(box);
 
     // Keep the renderer in sync with the viewport: element size changes (window resize, panel
@@ -249,13 +253,13 @@ function buildLabels(bounds) {
 
     const h = BOX / 2;
     // math x -> X axis, math y -> -Z axis, f -> Y axis
-    add(fmt(xMin), -h, 0, h + 0.9);
-    add(fmt(xMax), h, 0, h + 0.9);
-    add("x", 0, 0, h + 1.8, "#7fb4ff");
+    add(fmt(xMin), -h, -FLOOR_GAP, h + 0.9);
+    add(fmt(xMax), h, -FLOOR_GAP, h + 0.9);
+    add("x", 0, -FLOOR_GAP, h + 1.8, "#7fb4ff");
 
-    add(fmt(yMin), h + 0.9, 0, h);
-    add(fmt(yMax), h + 0.9, 0, -h);
-    add("y", h + 1.8, 0, 0, "#7fb4ff");
+    add(fmt(yMin), h + 0.9, -FLOOR_GAP, h);
+    add(fmt(yMax), h + 0.9, -FLOOR_GAP, -h);
+    add("y", h + 1.8, -FLOOR_GAP, 0, "#7fb4ff");
 
     add(fmt(fMin), -h - 0.9, 0, h);
     add(fmt(fMax), -h - 0.9, HEIGHT, h);

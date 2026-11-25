@@ -28,6 +28,8 @@ public sealed class ChartSettings
     public int MaxRefinements { get; set; } = 6;
     /// <summary>Safety cap on triangles per time step.</summary>
     public int MaxTriangles { get; set; } = 60000;
+    /// <summary>After refinement move every interior vertex to the average of its neighbours (then re-evaluate f there).</summary>
+    public bool LaplacianSmoothing { get; set; } = true;
 
     public const int MaxDivisions = 500;
     public const int MaxTimeDivisions = 5000;
