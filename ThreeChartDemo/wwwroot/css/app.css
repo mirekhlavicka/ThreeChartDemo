@@ -24,7 +24,7 @@ textarea.formula { width:100%; min-height:90px; padding:8px 10px; background:#0f
 select { width:100%; padding:7px 9px; background:#0f141a; color:var(--text); border:1px solid var(--line); border-radius:6px; font:inherit; }
 textarea:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; }
 input[type=range] { width:100%; }
-input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+input:not([type=range]):focus { outline:2px solid var(--accent); outline-offset:-1px; }
 .grid3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
 
 button { font:inherit; cursor:pointer; border-radius:6px; border:1px solid var(--line); background:#222d3a; color:var(--text); padding:8px 12px; }

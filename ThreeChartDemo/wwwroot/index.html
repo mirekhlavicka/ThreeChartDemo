@@ -3,9 +3,12 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>3D function chart - Blazor WASM + ThreeJS</title>
+    <title>3D function graph - Blazor WASM + ThreeJS</title>
     <!-- For hosting in a sub-folder (e.g. GitHub Pages project site) change to <base href="/RepoName/" /> -->
     <base href="/" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="stylesheet" href="css/app.css" />
 
     <!-- Filled in by .NET at build time (asset fingerprinting). Keep it. -->
@@ -13,12 +16,12 @@
 
     <!-- ThreeJS from CDN, fixed version. Addons (OrbitControls) import "three" via this map. -->
     <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+            }
         }
-    }
     </script>
 </head>
 <body>

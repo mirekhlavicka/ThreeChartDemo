@@ -6,7 +6,7 @@
 
 <div class="layout">
     <aside class="panel @(_panelOpen ? "" : "collapsed")">
-        <h1>Adaptive 3D function chart</h1>
+        <h1>Adaptive 3D function graph</h1>
         <p class="hint">Blazor WebAssembly AOT + NCalc + ThreeJS</p>
 
         <label for="formula">f(x, y, t) =</label>
@@ -61,7 +61,7 @@
         <button type="button" class="primary" disabled="@_creating" @onclick="CreateChartAsync">
             @(_creating
                 ? (_settings.Adaptive ? $"Precomputing frames… {_progress:P0}" : $"Computing… {_progress:P0}")
-                : "Create chart")
+                : "Create graph")
         </button>
 
         <button type="button" class="@(_animating ? "secondary active" : "secondary")" disabled="@(!HasChart || _creating)" @onclick="ToggleAnimation">
