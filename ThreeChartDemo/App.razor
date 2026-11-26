@@ -51,7 +51,8 @@
                 <input type="checkbox" @bind="_settings.LaplacianSmoothing" /> Laplacian smoothing
             </label>
             <p class="hint">X / Y divisions define the initial coarse grid. A triangle is refined when f at its centre differs
-                from the linear interpolation of its vertices by more than epsilon (absolute units of f).</p>
+                from the linear interpolation of its vertices by more than epsilon times range of f.
+            </p>
         }
 
         <label>Speed (time steps per second)
@@ -74,6 +75,12 @@
 
         <label class="check">
             <input type="checkbox" checked="@_wireframe" @onchange="OnWireframeChanged" /> Wireframe
+        </label>
+        <label class="check">
+            <input type="checkbox" checked="@_heatMap" @onchange="OnHeatMapChanged" /> Heat map on the floor (16 levels)
+        </label>
+        <label class="check">
+            <input type="checkbox" checked="@_contours" disabled="@(!_heatMap)" @onchange="OnContoursChanged" /> Contour lines
         </label>
         <button type="button" class="secondary" @onclick="ResetViewAsync">Reset view</button>
 
@@ -115,7 +122,8 @@
         ("Moving peak (sharp, good for adaptive)", "3 * exp(-((x - 3*cos(t))*(x - 3*cos(t)) + (y - 3*sin(t))*(y - 3*sin(t))))"),
         ("Moving two peaks", "3 * exp(-((x - 3*cos(t))*(x - 3*cos(t)) + (y - 3*sin(t))*(y - 3*sin(t)))) + 3 * exp(-((x - 3*cos(-t))*(x - 3*cos(-t)) + (y - 3*sin(-t))*(y - 3*sin(-t))))"),
         ("Interference", "sin(x*y + t)"),
-        ("Advanced", "x*sin(2*x + t) + y*cos(2*y - t)")
+        ("Fan", "sin(8*atan2(y,x)+t)*(x*x + y*y)"),
+        ("Advanced", "x*sin(2*x + t) + y*cos(2*y - t)"),
     };
 
     private string _selectedExample = "";
@@ -136,6 +144,8 @@
     private bool _loopRunning;
     private bool _disposed;
     private bool _wireframe = true;
+    private bool _heatMap = true;
+    private bool _contours = true;
     private bool _panelOpen = true;
     private long _stepIndex;      // ever-growing animation counter
     private int _tIndex;          // current discrete time index 0..N
@@ -152,7 +162,20 @@
         _tCount = _settings.DivisionsT;
         _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/scene.js");
         await _module.InvokeVoidAsync("init", _host);
-        await CreateChartAsync();   // draw the default function immediately
+        await _module.InvokeVoidAsync("setHeatMap", _heatMap);
+        await _module.InvokeVoidAsync("setContours", _contours);
+
+        // Deep link: ?sample=Plane%20wave loads that example instead of the default formula.
+        var sampleName = await _module.InvokeAsync<string?>("getQueryParam", "sample");
+        if (!string.IsNullOrWhiteSpace(sampleName))
+        {
+            var sample = Examples.FirstOrDefault(e =>
+                string.Equals(e.Name, sampleName.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (sample.Formula is not null)
+                _settings.Formula = sample.Formula;
+        }
+
+        await CreateChartAsync();   // draw the (default or selected) function immediately
     }
 
     // ---------------------------------------------------------------- chart creation
@@ -361,10 +384,17 @@
     private static byte[] ToBytes(ReadOnlySpan<float> data) => MemoryMarshal.AsBytes(data).ToArray();
     private static byte[] ToBytes(ReadOnlySpan<uint> data) => MemoryMarshal.AsBytes(data).ToArray();
 
-    private void ApplyExample()
+    private async Task ApplyExample()
     {
         if (!string.IsNullOrEmpty(_selectedExample))
+        {
             _settings.Formula = _selectedExample;
+
+            // remember the choice in the address bar (no reload): ?sample=Plane%20wave
+            var sample = Examples.FirstOrDefault(e => e.Formula == _selectedExample);
+            if (sample.Name is not null && _module is not null)
+                await _module.InvokeVoidAsync("setQueryParam", "sample", sample.Name);
+        }
         _selectedExample = "";      // show the placeholder again, so the same example can be picked twice
     }
 
@@ -372,6 +402,18 @@
     {
         _wireframe = e.Value is true;
         if (_module is not null) await _module.InvokeVoidAsync("setWireframe", _wireframe);
+    }
+
+    private async Task OnHeatMapChanged(ChangeEventArgs e)
+    {
+        _heatMap = e.Value is true;
+        if (_module is not null) await _module.InvokeVoidAsync("setHeatMap", _heatMap);
+    }
+
+    private async Task OnContoursChanged(ChangeEventArgs e)
+    {
+        _contours = e.Value is true;
+        if (_module is not null) await _module.InvokeVoidAsync("setContours", _contours);
     }
 
     private async Task ResetViewAsync()

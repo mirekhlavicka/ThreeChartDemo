@@ -6,6 +6,9 @@ namespace ThreeChartDemo.Meshing;
 /// <summary>Builds one adaptively refined mesh of f(x, y) for a fixed time.</summary>
 public static class AdaptiveMesher
 {
+    /// <summary>Number of Laplacian smoothing passes (used when ChartSettings.LaplacianSmoothing is on).</summary>
+    private const int SmoothingPasses = 3;
+
     public static async Task<AdaptiveFrame> BuildFrameAsync(
         Func<double, double, double> f,
         ChartSettings s,
@@ -17,12 +20,26 @@ public static class AdaptiveMesher
         // 1) initial uniform mesh: grid, each cell cut into two triangles
         var mesh = TriMesh.CreateGrid(s.XMin, s.XMax, s.YMin, s.YMax, s.DivisionsX, s.DivisionsY);
 
-        // 2) f in vertices
+        // 2) f in vertices (and the range of f on the base grid, before any refinement)
+        double fMin = double.PositiveInfinity, fMax = double.NegativeInfinity;
         for (int v = 0; v < mesh.VertexCount; v++)
         {
-            mesh.SetF(v, f(mesh.X(v), mesh.Y(v)));
+            double fv = f(mesh.X(v), mesh.Y(v));
+            mesh.SetF(v, fv);
+
+            if (double.IsFinite(fv))
+            {
+                if (fv < fMin) fMin = fv;
+                if (fv > fMax) fMax = fv;
+            }
             if ((v & 255) == 0) await slicer.YieldIfNeededAsync(ct);
         }
+
+        // Epsilon is relative to the range of f. For a constant function (range 0) there is nothing to
+        // resolve, so fall back to epsilon itself as an absolute value instead of a threshold of 0.
+        double range = fMin <= fMax ? fMax - fMin : 0;
+        double threshold = range > 0 ? s.Epsilon * range : s.Epsilon;
+
         progress?.Invoke(0.1);
 
         // 3) refinement passes
@@ -40,7 +57,7 @@ public static class AdaptiveMesher
                 int t = candidates[i];
                 if (mesh.IsFlagged(t)) continue;                 // already in the list
 
-                if (NeedsRefinement(mesh, t, f, s.Epsilon))
+                if (NeedsRefinement(mesh, t, f, threshold))
                 {
                     mesh.SetFlag(t, true);
                     refineList.Add(t);
@@ -71,11 +88,9 @@ public static class AdaptiveMesher
             if (capped) break;
         }
 
-        // 4) optional Laplacian smoothing: 3 passes, then evaluate f at the final positions
+        // 4) optional Laplacian smoothing: several passes, then evaluate f once at the final positions
         if (s.LaplacianSmoothing)
         {
-            const int SmoothingPasses = 3;
-
             var movedSet = new HashSet<int>();
             for (int pass = 0; pass < SmoothingPasses; pass++)
             {
@@ -83,11 +98,11 @@ public static class AdaptiveMesher
                     movedSet.Add(v);                      // a vertex may move in several passes
             }
 
-            int i = 0;
+            int n = 0;
             foreach (int v in movedSet)
             {
                 mesh.SetF(v, f(mesh.X(v), mesh.Y(v)));
-                if ((++i & 255) == 0) await slicer.YieldIfNeededAsync(ct);
+                if ((++n & 255) == 0) await slicer.YieldIfNeededAsync(ct);
             }
         }
 
@@ -97,10 +112,12 @@ public static class AdaptiveMesher
 
     /// <summary>
     /// The centre is the average of the vertices, so the linear approximation at the centre is simply
-    /// the average of the three vertex values. Undefined (NaN / infinite) values: refine where defined
-    /// and undefined points meet, to resolve the boundary of the domain of f.
+    /// the average of the three vertex values. The triangle needs refinement when the difference
+    /// exceeds <paramref name="threshold"/> (epsilon * range of f on the base grid).
+    /// Undefined (NaN / infinite) values: refine where defined and undefined points meet,
+    /// to resolve the boundary of the domain of f.
     /// </summary>
-    private static bool NeedsRefinement(TriMesh mesh, int t, Func<double, double, double> f, double epsilon)
+    private static bool NeedsRefinement(TriMesh mesh, int t, Func<double, double, double> f, double threshold)
     {
         int a = mesh.Vertex(t, 0), b = mesh.Vertex(t, 1), c = mesh.Vertex(t, 2);
         double fa = mesh.F(a), fb = mesh.F(b), fc = mesh.F(c);
@@ -116,6 +133,6 @@ public static class AdaptiveMesher
         if (finite < 4) return true;            // border of the domain of f
 
         double linear = (fa + fb + fc) / 3.0;
-        return Math.Abs(fCenter - linear) > epsilon;
+        return Math.Abs(fCenter - linear) > threshold;
     }
 }

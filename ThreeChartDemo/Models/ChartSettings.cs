@@ -14,7 +14,7 @@ public sealed class ChartSettings
 
     public int DivisionsX { get; set; } = 20;
     public int DivisionsY { get; set; } = 20;
-    public int DivisionsT { get; set; } = 60;
+    public int DivisionsT { get; set; } = 6;
 
     /// <summary>Animation speed: how many time steps are shown per second.</summary>
     public int StepsPerSecond { get; set; } = 20;
@@ -22,8 +22,8 @@ public sealed class ChartSettings
     // ---- adaptive meshing ----
     /// <summary>true: every time step gets its own locally refined triangle mesh (precomputed).</summary>
     public bool Adaptive { get; set; } = false;
-    /// <summary>Refine a triangle when |f(centre) - linear interpolation of its vertices| exceeds this.</summary>
-    public double Epsilon { get; set; } = 0.02;
+    /// <summary>Refine a triangle when |f(centre) - linear interpolation of its vertices| exceeds this * (fmax - fmin).</summary>
+    public double Epsilon { get; set; } = 0.005;
     /// <summary>Maximum number of refinement passes per time step.</summary>
     public int MaxRefinements { get; set; } = 6;
     /// <summary>Safety cap on triangles per time step.</summary>

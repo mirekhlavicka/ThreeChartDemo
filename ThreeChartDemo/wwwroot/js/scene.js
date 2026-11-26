@@ -3,16 +3,97 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const BOX = 10, HEIGHT = 5;
-const FLOOR_GAP = 0.1;      // distance between the lowest possible surface point (y = 0) and the floor grid
+const FLOOR_GAP = 0.2;      // distance between the lowest possible surface point (y = 0) and the floor grid
 
 let host, renderer, scene, camera, controls, resizeObserver;
 let surface = null;
 let wire = null;                 // line overlay (edges of the triangles), child of `surface`
 let wireVisible = true;
+let heat = null;                 // heat map on the floor (shares the surface geometry), child of `surface`
+let heatVisible = true;
 let labels = null;
 let labelKey = "";
 
 const wireMaterial = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.15 });
+
+// ---- heat map material ----
+// The heat map is the SAME mesh as the surface (same BufferGeometry object, so it follows every
+// animation update for free), drawn with a custom shader:
+//   vertex shader   : flattens the mesh onto the floor (y = const) and passes the original height
+//                     (0..1) to the fragment shader as a varying;
+//   fragment shader : quantises the interpolated height to 16 levels and looks the colour up in a
+//                     uniform palette. No texture is needed: no filtering, mipmaps or edge bleeding
+//                     to worry about, and the level borders are exactly sharp.
+//                     Optionally (uniform uContours) it also draws thin anti-aliased lines on the
+//                     borders between the levels, using screen-space derivatives (fwidth).
+const HEAT_LEVELS = 16;
+const HEAT_STOPS = [                      // same viridis-like stops as the C# colour map
+    [0.267, 0.005, 0.329],
+    [0.231, 0.322, 0.546],
+    [0.128, 0.567, 0.551],
+    [0.369, 0.789, 0.383],
+    [0.993, 0.906, 0.144],
+];
+
+function paletteColor(t) {
+    const x = Math.min(Math.max(t, 0), 1) * (HEAT_STOPS.length - 1);
+    const i = Math.min(Math.floor(x), HEAT_STOPS.length - 2);
+    const f = x - i;
+    const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+
+const heatMaterial = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    polygonOffset: true,                  // keep the floor grid lines visible on top of the colours
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+    uniforms: {
+        // colour of level i = colour map sampled in the middle of the i-th of 16 equal blocks
+        uPalette: {
+            value: Array.from({ length: HEAT_LEVELS },
+                (_, i) => new THREE.Vector3(...paletteColor((i + 0.5) / HEAT_LEVELS))),
+        },
+        uFloorY: { value: -FLOOR_GAP - 0.02 },   // just below the grid lines
+        uHeight: { value: HEIGHT },
+        uContours: { value: 1.0 },               // 1 = draw contour lines, 0 = off (set by setContours)
+        uLineWidth: { value: 0.6 },              // contour line width in framebuffer pixels
+    },
+    vertexShader: /* glsl */ `
+        uniform float uFloorY;
+        uniform float uHeight;
+        varying float vT;
+        void main() {
+            vT = position.y / uHeight;                         // f normalised to 0..1
+            vec3 p = vec3(position.x, uFloorY, position.z);    // flatten onto the floor
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }
+    `,
+    fragmentShader: /* glsl */ `
+        uniform vec3 uPalette[${HEAT_LEVELS}];
+        uniform float uContours;
+        uniform float uLineWidth;
+        varying float vT;
+        void main() {
+            float x = clamp(vT, 0.0, 1.0) * ${HEAT_LEVELS}.0;          // 0 .. 16
+            int level = int(min(floor(x), ${HEAT_LEVELS - 1}.0));
+            vec3 color = uPalette[level];
+
+            if (uContours > 0.5) {
+                float n = floor(x + 0.5);                                // nearest level border
+                if (n > 0.5 && n < ${HEAT_LEVELS - 1}.5) {               // skip the outer edges of the range
+                    float w = max(fwidth(x), 1e-5);                      // how much x changes per pixel
+                    float dist = abs(x - n) / w;                         // distance to the border in pixels
+                    float line = 1.0 - smoothstep(0.5 * uLineWidth, 0.5 * uLineWidth + 1.0, dist);
+                    color = mix(color, vec3(0.04), 0.25 * line);
+                }
+            }
+
+            gl_FragColor = vec4(color, 1.0);
+            #include <colorspace_fragment>
+        }
+    `,
+});
 
 export function init(hostElement) {
     host = hostElement;
@@ -70,7 +151,9 @@ function resize() {
     const w = Math.max(Math.floor(rect.width), 1);
     const h = Math.max(Math.floor(rect.height), 1);
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setPixelRatio(ratio);
+    heatMaterial.uniforms.uLineWidth.value = 0.6 * ratio;     // same visual thickness on hi-dpi screens
     renderer.setSize(w, h, false);          // CSS size comes from the stylesheet (100% of host)
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -142,6 +225,7 @@ function disposeWire() {
 export function setMesh(positionBytes, colorBytes, indexBytes, bounds) {
     if (surface) {
         disposeWire();
+        heat = null;                    // child of the old surface; geometry and material are not owned by it
         scene.remove(surface);
         surface.geometry.dispose();
         surface.material.dispose();
@@ -170,6 +254,12 @@ export function setMesh(positionBytes, colorBytes, indexBytes, bounds) {
     surface = new THREE.Mesh(geometry, material);
     surface.frustumCulled = false;          // bounding sphere would go stale while animating
     scene.add(surface);
+
+    // Heat map: same geometry object as the surface -> follows the animation without any extra work.
+    heat = new THREE.Mesh(geometry, heatMaterial);
+    heat.frustumCulled = false;
+    heat.visible = heatVisible;
+    surface.add(heat);
 
     rebuildWireframe(indices);
 
@@ -217,6 +307,33 @@ export function setWireframe(value) {
     if (wire) wire.visible = value;
 }
 
+/** Shows / hides the 16-level heat map on the floor. */
+export function setHeatMap(value) {
+    heatVisible = value;
+    if (heat) heat.visible = value;
+}
+
+/** Contour lines between the 16 levels of the heat map: the value is passed to the shader as a uniform. */
+export function setContours(value) {
+    heatMaterial.uniforms.uContours.value = value ? 1.0 : 0.0;
+}
+
+// ---- query string helpers (used for deep links like ?sample=Plane%20wave) ----
+
+/** Value of the query string parameter, or null when it is not present. */
+export function getQueryParam(name) {
+    return new URLSearchParams(window.location.search).get(name);
+}
+
+/** Sets a query string parameter without reloading the page (and without adding a history entry). */
+export function setQueryParam(name, value) {
+    const params = new URLSearchParams(window.location.search);
+    params.set(name, value);
+    // URLSearchParams writes spaces as "+"; a literal "+" is already escaped as %2B, so this is safe.
+    const query = params.toString().replace(/\+/g, "%20");
+    window.history.replaceState(window.history.state, "", window.location.pathname + "?" + query + window.location.hash);
+}
+
 export function resetView() {
     camera.position.set(11, 9, 13);
     controls.target.set(0, 2, 0);
@@ -231,6 +348,7 @@ export function dispose() {
     disposeWire();
     if (surface) { surface.geometry.dispose(); surface.material.dispose(); }
     wireMaterial.dispose();
+    heatMaterial.dispose();
     renderer?.dispose();
     renderer?.domElement.remove();
     renderer = null;
