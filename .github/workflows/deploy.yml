@@ -45,5 +45,7 @@ jobs:
         with:
           path: release/wwwroot
 
+      - run: sleep 10
+      
       - id: deployment
         uses: actions/deploy-pages@v4
