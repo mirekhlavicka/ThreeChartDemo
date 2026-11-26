@@ -14,7 +14,7 @@ public sealed class ChartSettings
 
     public int DivisionsX { get; set; } = 20;
     public int DivisionsY { get; set; } = 20;
-    public int DivisionsT { get; set; } = 6;
+    public int DivisionsT { get; set; } = 60;
 
     /// <summary>Animation speed: how many time steps are shown per second.</summary>
     public int StepsPerSecond { get; set; } = 20;
